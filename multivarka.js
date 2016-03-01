@@ -5,13 +5,8 @@ const mongoClient = require('mongodb').MongoClient;
 module.exports = {
     server: function (url) {
         this.url = url;
-        if (this.condition) {
-            if (this.condition[this.condition.length - 1]) {
-                this.condition.push({});
-            }
-        } else {
-            this.condition = [{}];
-        }
+        this.condition = this.condition ? this.condition : [];
+        this.condition.push({});
         return this;
     },
     collection: function (collection) {
@@ -27,36 +22,36 @@ module.exports = {
         return this;
     },
     lessThan: function (n) {
-        this.condition[this.condition.length - 1] = setLess(n, this);
+        this.condition = setCondition(this, 'less', n);
         this.isNegative = false;
         return this;
     },
     greatThan: function (n) {
-        this.condition[this.condition.length - 1] = setGreat(n, this);
+        this.condition = setCondition(this, 'great', n);
         this.isNegative = false;
         return this;
     },
     equal: function (n) {
-        this.condition[this.condition.length - 1] = setEqual(n, this);
+        this.condition = setCondition(this, 'equal', n);
         this.isNegative = false;
         return this;
     },
     include: function (listObj) {
-        this.condition[this.condition.length - 1] = setInclude(listObj, this);
+        this.condition = setCondition(this, 'include', listObj);
         this.isNegative = false;
         return this;
     },
     find: function (callback) {
-        doQuery(this, (collection, db) => {
-            collection.find(this.condition.splice(0, 1)[0]).toArray((err, data) => {
+        doQuery(this, (collection, db, condition) => {
+            collection.find(condition).toArray((err, data) => {
                 callback(err, data);
                 db.close();
             });
         });
     },
     remove: function (callback) {
-        doQuery(this, (collection, db) => {
-            collection.deleteMany(this.condition.splice(0, 1)[0], (err, data) => {
+        doQuery(this, (collection, db, condition) => {
+            collection.deleteMany(condition, (err, data) => {
                 callback(err, data);
                 db.close();
             });
@@ -69,8 +64,8 @@ module.exports = {
         return this;
     },
     update: function (callback) {
-        doQuery(this, (collection, db) => {
-            collection.update(this.condition.splice(0, 1)[0], this.set, (err, data) => {
+        doQuery(this, (collection, db, condition) => {
+            collection.update(condition, this.set, (err, data) => {
                 callback(err, data);
                 db.close();
             });
@@ -78,7 +73,6 @@ module.exports = {
     },
     insert: function (newObj, callback) {
         doQuery(this, (collection, db) => {
-            this.condition.splice(0, 1);
             collection.insert(newObj, (err, data) => {
                 callback(err, data);
                 db.close();
@@ -92,36 +86,25 @@ function doQuery(obj, callback) {
         if (err) {
             console.error(err);
         } else {
-            var collection = db.collection(obj.collect);
-            callback(collection, db);
+            callback(db.collection(obj.collect), db, obj.condition.splice(0, 1)[0]);
         }
     });
 }
 
-function getCondition(obj) {
-    return obj.condition ? obj.condition[obj.condition.length - 1] : {};
+function setCondition(obj, name, n) {
+    obj.condition[obj.condition.length - 1][obj.field] = getMongoCommand(name, n, obj.isNegative);
+    return obj.condition;
 }
 
-function setLess(n, obj) {
-    var curCondition = getCondition(obj);
-    curCondition[obj.field] = obj.isNegative ? { $gt: n } : { $lt: n };
-    return curCondition;
-}
-
-function setGreat(n, obj) {
-    var curCondition = getCondition(obj);
-    curCondition[obj.field] = obj.isNegative ? { $lt: n } : { $gt: n };
-    return curCondition;
-}
-
-function setEqual(n, obj) {
-    var curCondition = getCondition(obj);
-    curCondition[obj.field] = obj.isNegative ? { $ne: n } : n;
-    return curCondition;
-}
-
-function setInclude(listObj, obj) {
-    var curCondition = getCondition(obj);
-    curCondition[obj.field] = obj.isNegative ? { $nin: listObj } : { $in: listObj };
-    return curCondition;
+function getMongoCommand(condition, n, isNegative) {
+    switch (condition) {
+        case 'less':
+            return isNegative ? { $gt: n } : { $lt: n };
+        case 'great':
+            return isNegative ? { $lt: n } : { $gt: n };
+        case 'equal':
+            return isNegative ? { $ne: n } : n;
+        case 'include':
+            return isNegative ? { $nin: n } : { $in: n };
+    }
 }
