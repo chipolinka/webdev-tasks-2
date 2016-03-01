@@ -5,10 +5,17 @@ const mongoClient = require('mongodb').MongoClient;
 module.exports = {
     server: function (url) {
         this.url = url;
+        if (this.condition) {
+            if (this.condition[this.condition.length - 1]) {
+                this.condition.push({});
+            }
+        } else {
+            this.condition = [{}];
+        }
         return this;
     },
     collection: function (collection) {
-        this.collection = collection;
+        this.collect = collection;
         return this;
     },
     not: function () {
@@ -20,24 +27,28 @@ module.exports = {
         return this;
     },
     lessThan: function (n) {
-        this.condition = setLess(n, this);
+        this.condition[this.condition.length - 1] = setLess(n, this);
+        this.isNegative = false;
         return this;
     },
     greatThan: function (n) {
-        this.condition = setGreat(n, this);
+        this.condition[this.condition.length - 1] = setGreat(n, this);
+        this.isNegative = false;
         return this;
     },
     equal: function (n) {
-        this.condition = setEqual(n, this);
+        this.condition[this.condition.length - 1] = setEqual(n, this);
+        this.isNegative = false;
         return this;
     },
     include: function (listObj) {
-        this.condition = setInclude(listObj, this);
+        this.condition[this.condition.length - 1] = setInclude(listObj, this);
+        this.isNegative = false;
         return this;
     },
     find: function (callback) {
         doQuery(this, (collection, db) => {
-            collection.find(this.condition).toArray((err, data) => {
+            collection.find(this.condition.splice(0, 1)[0]).toArray((err, data) => {
                 callback(err, data);
                 db.close();
             });
@@ -45,7 +56,7 @@ module.exports = {
     },
     remove: function (callback) {
         doQuery(this, (collection, db) => {
-            collection.remove(this.condition, (err, data) => {
+            collection.deleteMany(this.condition.splice(0, 1)[0], (err, data) => {
                 callback(err, data);
                 db.close();
             });
@@ -59,7 +70,7 @@ module.exports = {
     },
     update: function (callback) {
         doQuery(this, (collection, db) => {
-            collection.update(this.condition, this.set, (err, data) => {
+            collection.update(this.condition.splice(0, 1)[0], this.set, (err, data) => {
                 callback(err, data);
                 db.close();
             });
@@ -67,6 +78,7 @@ module.exports = {
     },
     insert: function (newObj, callback) {
         doQuery(this, (collection, db) => {
+            this.condition.splice(0, 1);
             collection.insert(newObj, (err, data) => {
                 callback(err, data);
                 db.close();
@@ -80,32 +92,36 @@ function doQuery(obj, callback) {
         if (err) {
             console.error(err);
         } else {
-            var collection = db.collection(obj.collection);
+            var collection = db.collection(obj.collect);
             callback(collection, db);
         }
     });
 }
 
+function getCondition(obj) {
+    return obj.condition ? obj.condition[obj.condition.length - 1] : {};
+}
+
 function setLess(n, obj) {
-    var newObj = {};
-    newObj[obj.field] = obj.isNegative ? { $gt: n } : { $lt: n };
-    return newObj;
+    var curCondition = getCondition(obj);
+    curCondition[obj.field] = obj.isNegative ? { $gt: n } : { $lt: n };
+    return curCondition;
 }
 
 function setGreat(n, obj) {
-    var newObj = {};
-    newObj[obj.field] = obj.isNegative ? { $lt: n } : { $gt: n };
-    return newObj;
+    var curCondition = getCondition(obj);
+    curCondition[obj.field] = obj.isNegative ? { $lt: n } : { $gt: n };
+    return curCondition;
 }
 
 function setEqual(n, obj) {
-    var newObj = {};
-    newObj[obj.field] = obj.isNegative ? { $ne: n } : n;
-    return newObj;
+    var curCondition = getCondition(obj);
+    curCondition[obj.field] = obj.isNegative ? { $ne: n } : n;
+    return curCondition;
 }
 
 function setInclude(listObj, obj) {
-    var newObj = {};
-    newObj[obj.field] = obj.isNegative ? { $nin: listObj } : { $in: listObj };
-    return newObj;
+    var curCondition = getCondition(obj);
+    curCondition[obj.field] = obj.isNegative ? { $nin: listObj } : { $in: listObj };
+    return curCondition;
 }
