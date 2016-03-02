@@ -5,8 +5,7 @@ const mongoClient = require('mongodb').MongoClient;
 module.exports = {
     server: function (url) {
         this.url = url;
-        this.condition = this.condition ? this.condition : [];
-        this.condition.push({});
+        this.condition = this.condition ? this.condition : [{}];
         return this;
     },
     collection: function (collection) {
@@ -23,22 +22,18 @@ module.exports = {
     },
     lessThan: function (n) {
         this.condition = setCondition(this, 'less', n);
-        this.isNegative = false;
         return this;
     },
     greatThan: function (n) {
         this.condition = setCondition(this, 'great', n);
-        this.isNegative = false;
         return this;
     },
     equal: function (n) {
         this.condition = setCondition(this, 'equal', n);
-        this.isNegative = false;
         return this;
     },
     include: function (listObj) {
         this.condition = setCondition(this, 'include', listObj);
-        this.isNegative = false;
         return this;
     },
     find: function (callback) {
@@ -82,17 +77,19 @@ module.exports = {
 };
 
 function doQuery(obj, callback) {
+    obj.condition.push({});
     mongoClient.connect(obj.url, (err, db) => {
         if (err) {
             console.error(err);
         } else {
-            callback(db.collection(obj.collect), db, obj.condition.splice(0, 1)[0]);
+            callback(db.collection(obj.collect), db, obj.condition.shift());
         }
     });
 }
 
 function setCondition(obj, name, n) {
     obj.condition[obj.condition.length - 1][obj.field] = getMongoCommand(name, n, obj.isNegative);
+    obj.isNegative = false;
     return obj.condition;
 }
 
